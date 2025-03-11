@@ -16,38 +16,51 @@ const Container = styled.div`
 
 const ButtonContainer = styled.div`
   display: flex;
-  justify-content: flex-end; /* Aligns children (button) to the right */
-  padding: 10px; /* Adds some space around the button */
+  justify-content: flex-end;
+  padding: 10px;
 `;
 
 const Workspace = styled.div`
   display: flex;
-  margin: 0;
-  font-size: 16px;
   width: 100%;
 `;
 
 const LeftPanel = styled.div`
   flex: 1;
-  width: 60%;
 `;
 
 const RightPanel = styled.div`
   flex: 1;
-  width: 40%;
 `;
 
 function useSocket(replId: string) {
   const [socket, setSocket] = useState<Socket | null>(null);
 
   useEffect(() => {
+    if (!replId) {
+      console.error("No replId provided, cannot establish socket connection");
+      return;
+    }
+
     const newSocket = io(EXECUTION_ENGINE_URI, {
       transports: ["websocket", "polling"],
       query: { roomId: replId },
       withCredentials: true, // Ensures cookies are sent
     });
 
-    setSocket(newSocket);
+    newSocket.on("connect", () => {
+      console.log("Socket connected:", newSocket.id);
+      setSocket(newSocket);
+    });
+
+    newSocket.on("connect_error", (err) => {
+      console.error("Socket connection error:", err);
+    });
+
+    newSocket.on("disconnect", () => {
+      console.warn("Socket disconnected.");
+      setSocket(null); // Reset socket state on disconnect
+    });
 
     return () => {
       newSocket.disconnect();
@@ -67,47 +80,42 @@ export const CodingPage = () => {
   const [showOutput, setShowOutput] = useState(false);
 
   useEffect(() => {
-    if (socket) {
-      console.log("Socket connected:", socket.id);
+    if (!socket) return;
 
-      socket.on("loaded", ({ rootContent }: { rootContent: RemoteFile[] }) => {
-        console.log("Received 'loaded' event:", rootContent);
-        setLoaded(true);
-        setFileStructure(rootContent);
-      });
+    console.log("Socket connected:", socket.id);
 
-      socket.on("connect_error", (err) => {
-        console.error("Socket connection error:", err);
-      });
+    const handleLoaded = ({ rootContent }: { rootContent: RemoteFile[] }) => {
+      setLoaded(true);
+      setFileStructure(rootContent);
+    };
 
-      socket.on("disconnect", () => {
-        console.warn("Socket disconnected.");
-      });
-    }
+    socket.on("loaded", handleLoaded);
+    socket.on("connect_error", (err) => console.error("Socket error:", err));
+    socket.on("disconnect", () => console.warn("Socket disconnected."));
+
+    return () => {
+      socket.off("loaded", handleLoaded);
+    };
   }, [socket]);
 
   const onSelect = (file: File) => {
+    if (!socket) return;
+
     if (file.type === Type.DIRECTORY) {
-      socket?.emit("fetchDir", file.path, (data: RemoteFile[]) => {
-        setFileStructure((prev) => {
-          const allFiles = [...prev, ...data];
-          return allFiles.filter(
-            (file, index, self) =>
-              index === self.findIndex((f) => f.path === file.path)
-          );
-        });
+      socket.emit("fetchDir", file.path, (data: RemoteFile[]) => {
+        setFileStructure((prev) => [
+          ...prev,
+          ...data.filter((f) => !prev.some((p) => p.path === f.path)),
+        ]);
       });
     } else {
-      socket?.emit("fetchContent", { path: file.path }, (data: string) => {
-        file.content = data;
-        setSelectedFile(file);
+      socket.emit("fetchContent", { path: file.path }, (data: string) => {
+        setSelectedFile({ ...file, content: data });
       });
     }
   };
 
-  if (!loaded) {
-    return "Loading...";
-  }
+  if (!loaded) return "Loading...";
 
   return (
     <Container>
