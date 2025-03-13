@@ -14,17 +14,34 @@ function ShareSnippetDialog({ onClose }: { onClose: () => void }) {
   const handleShare = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!title.trim()) {
+      toast.error("Title cannot be empty");
+      return;
+    }
+
     setIsSharing(true);
 
     try {
       const code = getCode();
+      if (!code.trim()) {
+        throw new Error("Snippet code cannot be empty");
+      }
+
       await createSnippet({ title, language, code });
-      onClose();
-      setTitle("");
+
       toast.success("Snippet shared successfully");
-    } catch (error) {
-      console.log("Error creating snippet:", error);
-      toast.error("Error creating snippet");
+      setTitle("");
+      onClose();
+    } catch (error: unknown) { // ✅ Use 'unknown' instead of 'any'
+      console.error("Error creating snippet:", error);
+
+      let errorMessage = "Failed to share snippet. Please try again.";
+      if (error instanceof Error) {
+        errorMessage = error.message.includes("User not found")
+          ? "You must be logged in to share a snippet"
+          : error.message;
+      }
+      toast.error(errorMessage);
     } finally {
       setIsSharing(false);
     }
@@ -50,7 +67,8 @@ function ShareSnippetDialog({ onClose }: { onClose: () => void }) {
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 bg-[#181825] border border-[#313244] rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-[#181825] border border-[#313244] rounded-lg text-white 
+              focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Enter snippet title"
               required
             />
@@ -78,4 +96,5 @@ function ShareSnippetDialog({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
+
 export default ShareSnippetDialog;

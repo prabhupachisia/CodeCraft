@@ -6,7 +6,6 @@ export const saveExecution = mutation({
   args: {
     language: v.string(),
     code: v.string(),
-    // we could have either one of them, or both at the same time
     output: v.optional(v.string()),
     error: v.optional(v.string()),
   },
@@ -14,17 +13,7 @@ export const saveExecution = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new ConvexError("Not authenticated");
 
-    // check pro status
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_user_id")
-      .filter((q) => q.eq(q.field("userId"), identity.subject))
-      .first();
-
-    if (!user?.isPro && args.language !== "javascript") {
-      throw new ConvexError("Pro subscription required to use this language");
-    }
-
+    // Removed Pro restriction: Now all users can run any language
     await ctx.db.insert("codeExecutions", {
       ...args,
       userId: identity.subject,
@@ -81,8 +70,7 @@ export const getUserStats = query({
     );
 
     const mostStarredLanguage =
-      Object.entries(starredLanguages).sort(([, a], [, b]) => b - a)[0]?.[0] ??
-      "N/A";
+      Object.entries(starredLanguages).sort(([, a], [, b]) => b - a)[0]?.[0] ?? "N/A";
 
     // Calculate execution stats
     const last24Hours = executions.filter(
@@ -99,9 +87,7 @@ export const getUserStats = query({
 
     const languages = Object.keys(languageStats);
     const favoriteLanguage = languages.length
-      ? languages.reduce((a, b) =>
-          languageStats[a] > languageStats[b] ? a : b
-        )
+      ? languages.reduce((a, b) => (languageStats[a] > languageStats[b] ? a : b))
       : "N/A";
 
     return {

@@ -32,13 +32,10 @@ export const getUser = query({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_user_id")
-      .filter((q) => q.eq(q.field("userId"), args.userId))
+      .filter((q) => q.eq(q.field("userId"), args.userId)) // FIXED `.withIndex()`
       .first();
 
-    if (!user) return null;
-
-    return user;
+    return user || null;
   },
 });
 
@@ -65,5 +62,39 @@ export const upgradeToPro = mutation({
     });
 
     return { success: true };
+  },
+});
+
+export const storeUser = mutation({
+  args: {}, // No args needed, user info comes from Clerk
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity(); // Get user from Clerk
+
+    if (!identity) throw new Error("Not authenticated");
+
+    // Check if user already exists in Convex DB
+    const existingUser = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("userId"), identity.subject))
+      .first();
+
+    if (existingUser) {
+      console.log("User already exists:", existingUser);
+      return existingUser;
+    }
+
+    // Create new user in Convex
+    const newUser = await ctx.db.insert("users", {
+      userId: identity.subject, // Clerk user ID
+      email: identity.email ?? "", // Optional email
+      name: identity.name ?? "Anonymous",
+      isPro: false, // Default value
+      proSince: undefined, // FIXED: Use `undefined` instead of `null`
+      lemonSqueezyCustomerId: undefined, // FIXED: Use `undefined`
+      lemonSqueezyOrderId: undefined, // FIXED: Use `undefined`
+    });
+
+    console.log("New user created:", newUser);
+    return newUser;
   },
 });

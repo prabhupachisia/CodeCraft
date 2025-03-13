@@ -18,7 +18,7 @@ export const createSnippet = mutation({
       .first();
 
     if (!user) throw new Error("User not found");
-
+console.log(args);
     const snippetId = await ctx.db.insert("snippets", {
       userId: identity.subject,
       userName: user.name,
